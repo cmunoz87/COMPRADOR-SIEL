@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import altair as alt
 
 # -------------------------------------------------------------------
 # Configuración básica de la página
@@ -145,7 +146,7 @@ if archivo_siel is not None and archivo_cartera is not None:
         st.write(f"- Exámenes en cartera y no en SIEL: {len(examenes_cartera_no_en_siel)}")
 
         # -------------------------------------------------------------------
-        # Análisis por hospitales SSASUR (nuevo bloque)
+        # Análisis por hospitales SSASUR (datos + Excel + gráficos)
         # -------------------------------------------------------------------
         st.subheader("Análisis por hospitales")
 
@@ -226,7 +227,7 @@ if archivo_siel is not None and archivo_cartera is not None:
             mask_no_inf, HOSPITALES
         ].apply(hospitales_no_inf, axis=1)
 
-        # 7. Botón para descargar todo en un único Excel
+        # 7. Botón para descargar todo en un único Excel (análisis hospitales)
         def exportar_excel_multi():
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -248,6 +249,119 @@ if archivo_siel is not None and archivo_cartera is not None:
             file_name="ANALISIS_HOSPITALES_SSASUR.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+        # -------------------------------------------------------------------
+        # Pestaña de visualización (gráficos)
+        # -------------------------------------------------------------------
+        st.write("")
+        st.write("")
+        st.subheader("Visualización")
+
+        tab1, tab2, tab3 = st.tabs([
+            "Barras por hospital",
+            "Heatmap exámenes vs hospital",
+            "Resumen gráfico"
+        ])
+
+        # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
+        with tab1:
+            df_long = (
+                cartera_norm
+                .reset_index(drop=False)
+                .melt(id_vars="index", value_vars=HOSPITALES,
+                      var_name="Hospital", value_name="Estado")
+            )
+            df_counts = (
+                df_long
+                .groupby(["Hospital", "Estado"])
+                .size()
+                .reset_index(name="Cantidad")
+            )
+
+            chart_barras = (
+                alt.Chart(df_counts)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Hospital:N", title="Hospital"),
+                    y=alt.Y("Cantidad:Q", title="Cantidad de exámenes"),
+                    color=alt.Color("Estado:N", title="Estado"),
+                    tooltip=["Hospital", "Estado", "Cantidad"]
+                )
+                .properties(
+                    width=700,
+                    height=400,
+                    title="Distribución de exámenes por hospital según estado de cartera"
+                )
+            )
+            st.altair_chart(chart_barras, use_container_width=True)
+
+        # 2) Heatmap de exámenes vs hospital
+        with tab2:
+            # Limitamos a 80 exámenes para que sea legible
+            df_heat = df_matriz.head(80).copy()
+            heat_long = df_heat.melt(
+                id_vars=["Número", "Nombre exámen SIEL"],
+                value_vars=HOSPITALES,
+                var_name="Hospital",
+                value_name="Estado"
+            )
+
+            chart_heat = (
+                alt.Chart(heat_long)
+                .mark_rect()
+                .encode(
+                    x=alt.X("Hospital:N", title="Hospital"),
+                    y=alt.Y("Nombre exámen SIEL:N",
+                            title="Examen (primeros 80)",
+                            sort="ascending"),
+                    color=alt.Color("Estado:N", title="Estado"),
+                    tooltip=["Número", "Nombre exámen SIEL", "Hospital", "Estado"]
+                )
+                .properties(
+                    width=700,
+                    height=600,
+                    title="Mapa de exámenes vs hospital (estado de cartera)"
+                )
+            )
+            st.altair_chart(chart_heat, use_container_width=True)
+
+        # 3) Resumen gráfico (pie chart)
+        with tab3:
+            total_nadie = len(examenes_nadie_realiza)
+            total_no_inf = len(df_no_informado)
+            total_siel_no_cart = len(examenes_siel_no_en_cartera)
+            total_cart_no_siel = len(examenes_cartera_no_en_siel)
+
+            df_pie = pd.DataFrame({
+                "Categoria": [
+                    "SIEL no en cartera",
+                    "Cartera no en SIEL",
+                    "Ningún hospital realiza",
+                    "Exámenes con NO INFORMADO"
+                ],
+                "Valor": [
+                    total_siel_no_cart,
+                    total_cart_no_siel,
+                    total_nadie,
+                    total_no_inf
+                ]
+            })
+
+            chart_pie = (
+                alt.Chart(df_pie)
+                .mark_arc()
+                .encode(
+                    theta="Valor:Q",
+                    color="Categoria:N",
+                    tooltip=["Categoria", "Valor"]
+                )
+                .properties(
+                    width=500,
+                    height=400,
+                    title="Resumen global de inconsistencias / brechas"
+                )
+            )
+            st.altair_chart(chart_pie, use_container_width=True)
 
     except Exception as e:
         st.error(f"Ocurrió un error al procesar los archivos: {e}")
