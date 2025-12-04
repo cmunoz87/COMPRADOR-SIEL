@@ -257,11 +257,11 @@ if archivo_siel is not None and archivo_cartera is not None:
         st.write("")
         st.subheader("Visualización")
 
-        tab1 = st.tabs([
+        tab1, = st.tabs([
             "Barras por hospital",
         ])
 
-                # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
+        # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
         with tab1:
             # Selector de hospital
             opcion_hosp = st.selectbox(
