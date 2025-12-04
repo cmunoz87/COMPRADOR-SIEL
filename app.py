@@ -32,14 +32,14 @@ st.write("")  # pequeño espacio
 st.subheader("Carga de archivos")
 
 archivo_siel = st.file_uploader(
-    "Sube el archivo SIEL (LABORATORIOHOSPITALHERNANHENRIQUEZARAVENA_EXAMENES_VERSION_GLOBAL_04122025.xlsx)",
+    "Sube el archivo SIEL",
     type=["xlsx"],
     key="siel"
 )
 st.caption("Este archivo contiene la información cargada en SIEL.")
 
 archivo_cartera = st.file_uploader(
-    "Sube el archivo de cartera SSASUR (CARTERA DE PRESTACIONES SIEL SSAS_EXAMENES_VERSION_GLOBAL_2025-2026.xlsx)",
+    "Sube el archivo de la  cartera de prestaciones  SSASUR",
     type=["xlsx"],
     key="cartera"
 )
