@@ -263,14 +263,27 @@ if archivo_siel is not None and archivo_cartera is not None:
             "Resumen gráfico"
         ])
 
-        # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
+                # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
         with tab1:
+            # Selector de hospital
+            opcion_hosp = st.selectbox(
+                "Selecciona hospital para visualizar",
+                ["Todos los hospitales"] + HOSPITALES
+            )
+
+            # Pasar matriz a formato largo
             df_long = (
                 cartera_norm
                 .reset_index(drop=False)
-                .melt(id_vars="index", value_vars=HOSPITALES,
-                      var_name="Hospital", value_name="Estado")
+                .melt(
+                    id_vars="index",
+                    value_vars=HOSPITALES,
+                    var_name="Hospital",
+                    value_name="Estado"
+                )
             )
+
+            # Agrupar por hospital y estado
             df_counts = (
                 df_long
                 .groupby(["Hospital", "Estado"])
@@ -278,8 +291,17 @@ if archivo_siel is not None and archivo_cartera is not None:
                 .reset_index(name="Cantidad")
             )
 
+            # Filtrar según elección del usuario
+            if opcion_hosp != "Todos los hospitales":
+                df_counts_plot = df_counts[df_counts["Hospital"] == opcion_hosp]
+                titulo = f"Distribución de exámenes en {opcion_hosp}"
+            else:
+                df_counts_plot = df_counts
+                titulo = "Distribución de exámenes por hospital según estado de cartera"
+
+            # Gráfico
             chart_barras = (
-                alt.Chart(df_counts)
+                alt.Chart(df_counts_plot)
                 .mark_bar()
                 .encode(
                     x=alt.X("Hospital:N", title="Hospital"),
@@ -290,7 +312,7 @@ if archivo_siel is not None and archivo_cartera is not None:
                 .properties(
                     width=700,
                     height=400,
-                    title="Distribución de exámenes por hospital según estado de cartera"
+                    title=titulo
                 )
             )
             st.altair_chart(chart_barras, use_container_width=True)
