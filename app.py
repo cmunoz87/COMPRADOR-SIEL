@@ -257,10 +257,8 @@ if archivo_siel is not None and archivo_cartera is not None:
         st.write("")
         st.subheader("Visualización")
 
-        tab1, tab2, tab3 = st.tabs([
+        tab1 = st.tabs([
             "Barras por hospital",
-            "Heatmap exámenes vs hospital",
-            "Resumen gráfico"
         ])
 
                 # 1) Barras apiladas SI / NO / NO INFORMADO por hospital
