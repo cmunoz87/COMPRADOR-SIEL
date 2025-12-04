@@ -55,7 +55,7 @@ HOSPITALES = [
 ]
 
 # -------------------------------------------------------------------
-# Función auxiliar: DataFrame a Excel (bytes) para descarga
+# Función auxiliar: DataFrame a Excel (bytes) para descarga simple
 # -------------------------------------------------------------------
 def df_to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Hoja1") -> BytesIO:
     buffer = BytesIO()
@@ -108,7 +108,7 @@ if archivo_siel is not None and archivo_cartera is not None:
         examenes_cartera_no_en_siel = df_bd[mask_bd_no_en_siel].copy()
 
         # -------------------------------------------------------------------
-        # 7. Sección de descargas
+        # 7. Sección de descargas (comparación SIEL vs cartera)
         # -------------------------------------------------------------------
         st.subheader("Descarga de resultados")
 
@@ -144,6 +144,111 @@ if archivo_siel is not None and archivo_cartera is not None:
         st.write(f"- Exámenes en SIEL y no en cartera: {len(examenes_siel_no_en_cartera)}")
         st.write(f"- Exámenes en cartera y no en SIEL: {len(examenes_cartera_no_en_siel)}")
 
+        # -------------------------------------------------------------------
+        # Análisis por hospitales SSASUR (nuevo bloque)
+        # -------------------------------------------------------------------
+        st.subheader("Análisis por hospitales")
+
+        # Asegurar que exista 'Nombre exámen SIEL' en df_bd
+        if "Nombre exámen SIEL" not in df_bd.columns and "Nombre exámen" in df_bd.columns:
+            df_bd = df_bd.rename(columns={"Nombre exámen": "Nombre exámen SIEL"})
+
+        # Volver al inicio del archivo de cartera para leer todas las hojas
+        archivo_cartera.seek(0)
+        xls = pd.ExcelFile(archivo_cartera)
+
+        # 1. Cargar hojas de hospitales desde el archivo de cartera
+        dfs_hospitales = {
+            h: pd.read_excel(xls, sheet_name=h)
+            for h in HOSPITALES
+        }
+
+        # 2. Matriz base con Número y Nombre exámen SIEL
+        df_merged = df_bd[["Número", "Nombre exámen SIEL"]].drop_duplicates().copy()
+
+        # 3. Construcción de matriz hospitalaria
+        for h in HOSPITALES:
+            df_h = dfs_hospitales[h].copy()
+
+            # Detectar columna Número
+            if "Número" in df_h.columns:
+                num_col = "Número"
+            else:
+                num_col = df_h.columns[0]  # Columna A
+
+            # Normalizar Cartera
+            df_h["Cartera"] = (
+                df_h["Cartera"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .replace({"NAN": None, "": None})
+            )
+
+            tmp = (
+                df_h[[num_col, "Cartera"]]
+                .rename(columns={num_col: "Número", "Cartera": h})
+                .drop_duplicates(subset="Número", keep="last")
+            )
+
+            df_merged = df_merged.merge(tmp, on="Número", how="left")
+
+        # 4. Normalización final de la matriz (SI / NO / NO INFORMADO)
+        cartera_norm = df_merged[HOSPITALES].copy()
+
+        for h in HOSPITALES:
+            cartera_norm[h] = cartera_norm[h].fillna("NO INFORMADO")
+            cartera_norm[h] = cartera_norm[h].replace("", "NO INFORMADO")
+            cartera_norm[h] = cartera_norm[h].str.upper().str.strip()
+
+        # Matriz completa final (Número + Nombre exámen SIEL + hospitales)
+        df_matriz = pd.concat(
+            [df_merged[["Número", "Nombre exámen SIEL"]], cartera_norm],
+            axis=1
+        )
+
+        # 5. Exámenes que ningún hospital realiza (todos NO)
+        mask_nadie = (cartera_norm == "NO").all(axis=1)
+        examenes_nadie_realiza = df_matriz.loc[
+            mask_nadie, ["Número", "Nombre exámen SIEL"]
+        ]
+
+        # 6. Exámenes no informados (algún hospital NO INFORMADO)
+        mask_no_inf = (cartera_norm == "NO INFORMADO").any(axis=1)
+        df_no_informado = df_matriz.loc[
+            mask_no_inf, ["Número", "Nombre exámen SIEL"]
+        ].copy()
+
+        def hospitales_no_inf(row):
+            return ", ".join([h for h in HOSPITALES if row[h] == "NO INFORMADO"])
+
+        df_no_informado["Hospitales_no_informaron"] = df_matriz.loc[
+            mask_no_inf, HOSPITALES
+        ].apply(hospitales_no_inf, axis=1)
+
+        # 7. Botón para descargar todo en un único Excel
+        def exportar_excel_multi():
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                examenes_nadie_realiza.to_excel(
+                    writer, index=False, sheet_name="NINGUN_HOSPITAL_REALIZA"
+                )
+                df_no_informado.to_excel(
+                    writer, index=False, sheet_name="NO_INFORMADO"
+                )
+                df_matriz.to_excel(
+                    writer, index=False, sheet_name="MATRIZ_COMPLETA"
+                )
+            buffer.seek(0)
+            return buffer
+
+        st.download_button(
+            label="Descargar análisis por hospitales (Excel)",
+            data=exportar_excel_multi(),
+            file_name="ANALISIS_HOSPITALES_SSASUR.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
     except Exception as e:
         st.error(f"Ocurrió un error al procesar los archivos: {e}")
 
@@ -161,4 +266,3 @@ st.markdown(
     "</p>",
     unsafe_allow_html=True
 )
-
