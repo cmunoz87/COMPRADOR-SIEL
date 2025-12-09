@@ -535,6 +535,85 @@ if archivo_siel is not None and archivo_cartera is not None:
             else:
                 st.warning("No se encontró el examen seleccionado en la matriz.")
 
+        # -------------------------------------------------------------------
+        # Carteras agregadas (básica, nodos, alta complejidad)
+        # -------------------------------------------------------------------
+        st.write("")
+        st.write("")
+        st.subheader("Carteras agregadas (estándar básica, nodos, alta complejidad)")
+
+        # 1) Cartera estándar básica: exámenes que TODOS los hospitales realizan
+        mask_cartera_basica = (cartera_norm[HOSPITALES] == "SI").all(axis=1)
+        cartera_basica = df_matriz.loc[
+            mask_cartera_basica,
+            ["Número", "Nombre exámen SIEL"] + HOSPITALES
+        ].copy()
+
+        # 2) Cartera nodos: exámenes realizados por TODOS los nodos
+        mask_all_nodos = pd.Series(True, index=cartera_norm.index)
+        for nodo, lista_hosp in NODOS.items():
+            nodo_si = (cartera_norm[lista_hosp] == "SI").any(axis=1)
+            mask_all_nodos &= nodo_si
+
+        cartera_nodos = df_matriz.loc[
+            mask_all_nodos,
+            ["Número", "Nombre exámen SIEL"] + HOSPITALES
+        ].copy()
+
+        # 3) Cartera alta complejidad (HHHA)
+        mask_alta = cartera_norm["HHHA"] == "SI"
+        cartera_alta = df_matriz.loc[
+            mask_alta,
+            ["Número", "Nombre exámen SIEL"] + HOSPITALES
+        ].copy()
+
+        # Botón de descarga Excel con 3 hojas
+        def exportar_carteras_excel():
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                cartera_basica.to_excel(writer, index=False, sheet_name="CARTERA_BASICA")
+                cartera_nodos.to_excel(writer, index=False, sheet_name="CARTERA_NODOS")
+                cartera_alta.to_excel(writer, index=False, sheet_name="ALTA_COMPLEJIDAD")
+            buffer.seek(0)
+            return buffer
+
+        st.download_button(
+            label="Descargar carteras agregadas (Excel)",
+            data=exportar_carteras_excel(),
+            file_name="CARTERAS_AGREGADAS_SSASUR.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        # Gráfico con la cantidad de exámenes en cada cartera
+        df_resumen_carteras = pd.DataFrame({
+            "Tipo_cartera": [
+                "Cartera estándar básica (todos los hospitales)",
+                "Cartera nodos (todos los nodos)",
+                "Alta complejidad (HHHA)"
+            ],
+            "Cantidad_examenes": [
+                len(cartera_basica),
+                len(cartera_nodos),
+                len(cartera_alta)
+            ]
+        })
+
+        st.markdown("**Cantidad de exámenes por tipo de cartera**")
+        chart_carteras = (
+            alt.Chart(df_resumen_carteras)
+            .mark_bar()
+            .encode(
+                x=alt.X("Tipo_cartera:N", title="Tipo de cartera"),
+                y=alt.Y("Cantidad_examenes:Q", title="Cantidad de exámenes"),
+                tooltip=["Tipo_cartera", "Cantidad_examenes"]
+            )
+            .properties(
+                width=700,
+                height=400
+            )
+        )
+        st.altair_chart(chart_carteras, use_container_width=True)
+
     except Exception as e:
         st.error(f"Ocurrió un error al procesar los archivos: {e}")
 
