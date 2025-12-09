@@ -536,44 +536,50 @@ if archivo_siel is not None and archivo_cartera is not None:
                 st.warning("No se encontró el examen seleccionado en la matriz.")
 
         # -------------------------------------------------------------------
-        # Carteras agregadas (básica, nodos, alta complejidad)
+        # Carteras agregadas (básica, nodos, alta, baja complejidad)
         # -------------------------------------------------------------------
         st.write("")
         st.write("")
-        st.subheader("Carteras agregadas (estándar básica, nodos, alta complejidad)")
+        st.subheader("Carteras agregadas (estándar básica, nodos, alta y baja complejidad)")
 
         # 1) Cartera estándar básica: exámenes que TODOS los hospitales realizan
         mask_cartera_basica = (cartera_norm[HOSPITALES] == "SI").all(axis=1)
         cartera_basica = df_matriz.loc[
             mask_cartera_basica,
-            ["Número", "Nombre exámen SIEL"] + HOSPITALES
-        ].copy()
+            ["Número", "Nombre exámen SIEL"]
+        ].drop_duplicates()
 
-        # 2) Cartera nodos: exámenes realizados por TODOS los nodos
-        mask_all_nodos = pd.Series(True, index=cartera_norm.index)
-        for nodo, lista_hosp in NODOS.items():
-            nodo_si = (cartera_norm[lista_hosp] == "SI").any(axis=1)
-            mask_all_nodos &= nodo_si
-
+        # 2) Cartera nodos: exámenes realizados por TODOS los laboratorios de mediana complejidad (nodos)
+        hospitales_mediana = ["CAPLC", "HINI", "HPITRU", "HLAUTA", "HVILLA"]
+        mask_cartera_nodos = (cartera_norm[hospitales_mediana] == "SI").all(axis=1)
         cartera_nodos = df_matriz.loc[
-            mask_all_nodos,
-            ["Número", "Nombre exámen SIEL"] + HOSPITALES
-        ].copy()
+            mask_cartera_nodos,
+            ["Número", "Nombre exámen SIEL"]
+        ].drop_duplicates()
 
         # 3) Cartera alta complejidad (HHHA)
         mask_alta = cartera_norm["HHHA"] == "SI"
         cartera_alta = df_matriz.loc[
             mask_alta,
-            ["Número", "Nombre exámen SIEL"] + HOSPITALES
-        ].copy()
+            ["Número", "Nombre exámen SIEL"]
+        ].drop_duplicates()
 
-        # Botón de descarga Excel con 3 hojas
+        # 4) Cartera baja complejidad: exámenes realizados por TODOS los hospitales de baja complejidad
+        hospitales_baja = [h for h, comp in COMPLEJIDAD.items() if comp == "BAJA"]
+        mask_baja = (cartera_norm[hospitales_baja] == "SI").all(axis=1)
+        cartera_baja = df_matriz.loc[
+            mask_baja,
+            ["Número", "Nombre exámen SIEL"]
+        ].drop_duplicates()
+
+        # Botón de descarga Excel con 4 hojas
         def exportar_carteras_excel():
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                 cartera_basica.to_excel(writer, index=False, sheet_name="CARTERA_BASICA")
                 cartera_nodos.to_excel(writer, index=False, sheet_name="CARTERA_NODOS")
                 cartera_alta.to_excel(writer, index=False, sheet_name="ALTA_COMPLEJIDAD")
+                cartera_baja.to_excel(writer, index=False, sheet_name="BAJA_COMPLEJIDAD")
             buffer.seek(0)
             return buffer
 
@@ -588,13 +594,15 @@ if archivo_siel is not None and archivo_cartera is not None:
         df_resumen_carteras = pd.DataFrame({
             "Tipo_cartera": [
                 "Cartera estándar básica (todos los hospitales)",
-                "Cartera nodos (todos los nodos)",
-                "Alta complejidad (HHHA)"
+                "Cartera nodos (todos los nodos de mediana complejidad)",
+                "Alta complejidad (HHHA)",
+                "Baja complejidad (hospitales baja complejidad)"
             ],
             "Cantidad_examenes": [
                 len(cartera_basica),
                 len(cartera_nodos),
-                len(cartera_alta)
+                len(cartera_alta),
+                len(cartera_baja)
             ]
         })
 
