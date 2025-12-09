@@ -28,23 +28,29 @@ st.markdown(
 st.write("")  # pequeño espacio
 
 # -------------------------------------------------------------------
-# Carga de archivos
+# Carga de archivos (en 2 columnas, más compacto)
 # -------------------------------------------------------------------
 st.subheader("Carga de archivos")
 
-archivo_siel = st.file_uploader(
-    "Sube el archivo SIEL",
-    type=["xlsx"],
-    key="siel"
-)
-st.caption("Este archivo contiene la información cargada en SIEL.")
+col_siel, col_cartera = st.columns(2)
 
-archivo_cartera = st.file_uploader(
-    "Sube el archivo de la  cartera de prestaciones  SSASUR",
-    type=["xlsx"],
-    key="cartera"
-)
-st.caption("Este archivo contiene la información de la cartera de prestaciones disponible en SSASUR.")
+with col_siel:
+    st.markdown("**Sube el archivo SIEL**")
+    archivo_siel = st.file_uploader(
+        " ",
+        type=["xlsx"],
+        key="siel"
+    )
+    st.caption("Este archivo contiene la información cargada en SIEL.")
+
+with col_cartera:
+    st.markdown("**Sube el archivo de la cartera de prestaciones SSASUR**")
+    archivo_cartera = st.file_uploader(
+        "  ",
+        type=["xlsx"],
+        key="cartera"
+    )
+    st.caption("Este archivo contiene la información de la cartera de prestaciones disponible en SSASUR.")
 
 st.write("")  # espacio
 
