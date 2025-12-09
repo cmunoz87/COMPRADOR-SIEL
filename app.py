@@ -315,6 +315,220 @@ if archivo_siel is not None and archivo_cartera is not None:
             )
             st.altair_chart(chart_barras, use_container_width=True)
 
+        # -------------------------------------------------------------------
+        # Análisis por Nodo y nivel de complejidad (por examen)
+        # -------------------------------------------------------------------
+        st.write("")
+        st.write("")
+        st.subheader("Análisis por Nodo y nivel de complejidad (por examen)")
+
+        # Definición de Nodos (según estructura entregada)
+        NODOS = {
+            "CENTRO": ["CAPLC", "HCUNCO"],
+            "COSTERO": ["HINI", "HCARAH", "HSAAVE"],
+            "SUR": ["HPITRU", "HTOLTE", "HGORBE"],
+            "NORTE": ["HLAUTA", "HGALVA", "HVILCU"],
+            "LACUSTRE": ["HVILLA", "HLONCO"],
+        }
+
+        # Definición de complejidad por hospital
+        COMPLEJIDAD = {
+            "HHHA": "ALTA",
+            "CAPLC": "MEDIANA",
+            "HINI": "MEDIANA",
+            "HPITRU": "MEDIANA",
+            "HLAUTA": "MEDIANA",
+            "HVILLA": "MEDIANA",
+            "HCARAH": "BAJA",
+            "HCUNCO": "BAJA",
+            "HTOLTE": "BAJA",
+            "HGALVA": "BAJA",
+            "HLONCO": "BAJA",
+            "HGORBE": "BAJA",
+            "HSAAVE": "BAJA",
+            "HVILCU": "BAJA",
+        }
+
+        # Selector de examen a partir de df_matriz
+        opciones_examen = df_matriz[["Número", "Nombre exámen SIEL"]].copy()
+        opciones_examen["label"] = (
+            opciones_examen["Número"].astype(str)
+            + " - "
+            + opciones_examen["Nombre exámen SIEL"].astype(str)
+        )
+        opciones_examen = opciones_examen.drop_duplicates(subset=["label"])
+
+        examen_seleccionado = st.selectbox(
+            "Selecciona un examen para analizar por Nodo y complejidad:",
+            opciones_examen["label"].sort_values().tolist(),
+        )
+
+        if examen_seleccionado:
+            fila_sel = opciones_examen.loc[
+                opciones_examen["label"] == examen_seleccionado
+            ].iloc[0]
+
+            numero_sel = fila_sel["Número"]
+            nombre_sel = fila_sel["Nombre exámen SIEL"]
+
+            # Buscamos la fila correspondiente en df_matriz
+            fila_examen = df_matriz[
+                (df_matriz["Número"] == numero_sel)
+                & (df_matriz["Nombre exámen SIEL"] == nombre_sel)
+            ]
+
+            if not fila_examen.empty:
+                fila_examen = fila_examen.iloc[0]
+
+                # Estados por hospital para ese examen
+                estados_por_hospital = {
+                    h: fila_examen[h] for h in HOSPITALES if h in fila_examen.index
+                }
+
+                # ------------------------------------------
+                # 1) Resumen por NODO
+                # ------------------------------------------
+                datos_nodos = []
+                for nodo, lista_hosp in NODOS.items():
+                    estados = [
+                        estados_por_hospital[h]
+                        for h in lista_hosp
+                        if h in estados_por_hospital
+                    ]
+
+                    total_hosp_nodo = len(estados)
+                    if total_hosp_nodo == 0:
+                        continue
+
+                    n_si = sum(e == "SI" for e in estados)
+                    n_no = sum(e == "NO" for e in estados)
+                    n_no_inf = sum(e == "NO INFORMADO" for e in estados)
+
+                    # Regla de estado del Nodo
+                    if n_si >= 1:
+                        estado_nodo = "SI"
+                    elif n_si == 0 and n_no_inf > 0:
+                        estado_nodo = "NO INFORMADO"
+                    else:
+                        estado_nodo = "NO"
+
+                    porcentaje_si = round((n_si / total_hosp_nodo) * 100, 1)
+
+                    datos_nodos.append(
+                        {
+                            "Nodo": nodo,
+                            "Total_hospitales_nodo": total_hosp_nodo,
+                            "Hospitales_SI": n_si,
+                            "Hospitales_NO": n_no,
+                            "Hospitales_NO_INFORMADO": n_no_inf,
+                            "%_hospitales_SI": porcentaje_si,
+                            "Estado_nodo": estado_nodo,
+                        }
+                    )
+
+                df_nodos = pd.DataFrame(datos_nodos)
+
+                # ------------------------------------------
+                # 2) Resumen por nivel de COMPLEJIDAD
+                # ------------------------------------------
+                grupos_complejidad = {}
+                for hosp, comp in COMPLEJIDAD.items():
+                    if hosp in estados_por_hospital:
+                        grupos_complejidad.setdefault(comp, []).append(hosp)
+
+                datos_complejidad = []
+                for comp, lista_hosp in grupos_complejidad.items():
+                    estados = [estados_por_hospital[h] for h in lista_hosp]
+
+                    total_hosp_comp = len(estados)
+                    n_si = sum(e == "SI" for e in estados)
+                    n_no = sum(e == "NO" for e in estados)
+                    n_no_inf = sum(e == "NO INFORMADO" for e in estados)
+
+                    porcentaje_si = round((n_si / total_hosp_comp) * 100, 1)
+
+                    datos_complejidad.append(
+                        {
+                            "Complejidad": comp,
+                            "Total_hospitales": total_hosp_comp,
+                            "Hospitales_SI": n_si,
+                            "Hospitales_NO": n_no,
+                            "Hospitales_NO_INFORMADO": n_no_inf,
+                            "%_hospitales_SI": porcentaje_si,
+                        }
+                    )
+
+                df_complejidad = pd.DataFrame(datos_complejidad)
+
+                # ------------------------------------------
+                # Mostrar tablas resumen
+                # ------------------------------------------
+                st.markdown(
+                    f"**Examen seleccionado:** `{numero_sel}` - {nombre_sel}"
+                )
+
+                col_tab1, col_tab2 = st.columns(2)
+                with col_tab1:
+                    st.markdown("**Resumen por Nodo**")
+                    st.dataframe(df_nodos, use_container_width=True)
+
+                with col_tab2:
+                    st.markdown("**Resumen por nivel de complejidad**")
+                    st.dataframe(df_complejidad, use_container_width=True)
+
+                # ------------------------------------------
+                # Gráfico de porcentaje de hospitales que realizan el examen
+                # por Nodo
+                # ------------------------------------------
+                st.markdown("**Porcentaje de hospitales que realizan el examen por Nodo**")
+                chart_nodos = (
+                    alt.Chart(df_nodos)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X("Nodo:N", title="Nodo"),
+                        y=alt.Y("%_hospitales_SI:Q", title="% hospitales que realizan el examen"),
+                        tooltip=[
+                            "Nodo",
+                            "%_hospitales_SI",
+                            "Hospitales_SI",
+                            "Total_hospitales_nodo",
+                            "Estado_nodo",
+                        ],
+                    )
+                    .properties(
+                        width=600,
+                        height=300,
+                    )
+                )
+                st.altair_chart(chart_nodos, use_container_width=True)
+
+                # ------------------------------------------
+                # Gráfico de porcentaje de hospitales que realizan el examen
+                # por nivel de complejidad
+                # ------------------------------------------
+                st.markdown("**Porcentaje de hospitales que realizan el examen por nivel de complejidad**")
+                chart_comp = (
+                    alt.Chart(df_complejidad)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X("Complejidad:N", title="Nivel de complejidad"),
+                        y=alt.Y("%_hospitales_SI:Q", title="% hospitales que realizan el examen"),
+                        tooltip=[
+                            "Complejidad",
+                            "%_hospitales_SI",
+                            "Hospitales_SI",
+                            "Total_hospitales",
+                        ],
+                    )
+                    .properties(
+                        width=600,
+                        height=300,
+                    )
+                )
+                st.altair_chart(chart_comp, use_container_width=True)
+            else:
+                st.warning("No se encontró el examen seleccionado en la matriz.")
+
     except Exception as e:
         st.error(f"Ocurrió un error al procesar los archivos: {e}")
 
